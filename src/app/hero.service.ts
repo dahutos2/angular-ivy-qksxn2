@@ -1,13 +1,11 @@
 import { Injectable } from '@angular/core';
-
-import { Observable, of } from 'rxjs';
-
-import { Hero } from './hero';
-import { HEROES } from './mock-heroes';
-import { MessageService } from './message.service';
 import { HttpClient, HttpHeaders } from '@angular/common/http';
 
+import { Observable, of } from 'rxjs';
 import { catchError, map, tap } from 'rxjs/operators';
+
+import { Hero } from './hero';
+import { MessageService } from './message.service';
 
 @Injectable({ providedIn: 'root' })
 export class HeroService {
@@ -30,6 +28,19 @@ export class HeroService {
     );
   }
 
+  /** IDによりヒーローを取得する。idが見つからない場合は`undefined`を返す。 */
+  getHeroNo404<Data>(id: number): Observable<Hero> {
+    const url = `${this.heroesUrl}/?id=${id}`;
+    return this.http.get<Hero[]>(url).pipe(
+      map((heroes) => heroes[0]), // {0|1} 要素の配列を返す
+      tap((h) => {
+        const outcome = h ? 'fetched' : 'did not find';
+        this.log(`${outcome} hero id=${id}`);
+      }),
+      catchError(this.handleError<Hero>(`getHero id=${id}`))
+    );
+  }
+
   /** IDによりヒーローを取得する。見つからなかった場合は404を返却する。 */
   getHero(id: number): Observable<Hero> {
     const url = `${this.heroesUrl}/${id}`;
@@ -39,17 +50,19 @@ export class HeroService {
     );
   }
 
-  private log(message: string) {
-    this.messageService.add(`HeroService: ${message}`);
-  }
-
-  /** PUT: サーバー上でヒーローを更新 */
-  updateHero(hero: Hero): Observable<any> {
-    return this.http.put(this.heroesUrl, hero, this.httpOptions).pipe(
-      tap((_) => this.log(`updated hero id=${hero.id}`)),
-      catchError(this.handleError<any>('updateHero'))
+  /* 検索語を含むヒーローを取得する */
+  searchHeroes(term: string): Observable<Hero[]> {
+    if (!term.trim()) {
+      // 検索語がない場合、空のヒーロー配列を返す
+      return of([]);
+    }
+    return this.http.get<Hero[]>(`${this.heroesUrl}/?name=${term}`).pipe(
+      tap((_) => this.log(`found heroes matching "${term}"`)),
+      catchError(this.handleError<Hero[]>('searchHeroes', []))
     );
   }
+
+  //////// Save methods //////////
 
   /** POST: サーバーに新しいヒーローを登録する */
   addHero(hero: Hero): Observable<Hero> {
@@ -69,17 +82,14 @@ export class HeroService {
     );
   }
 
-  /* 検索語を含むヒーローを取得する */
-  searchHeroes(term: string): Observable<Hero[]> {
-    if (!term.trim()) {
-      // 検索語がない場合、空のヒーロー配列を返す
-      return of([]);
-    }
-    return this.http.get<Hero[]>(`${this.heroesUrl}/?name=${term}`).pipe(
-      tap((_) => this.log(`found heroes matching "${term}"`)),
-      catchError(this.handleError<Hero[]>('searchHeroes', []))
+  /** PUT: サーバー上でヒーローを更新 */
+  updateHero(hero: Hero): Observable<any> {
+    return this.http.put(this.heroesUrl, hero, this.httpOptions).pipe(
+      tap((_) => this.log(`updated hero id=${hero.id}`)),
+      catchError(this.handleError<any>('updateHero'))
     );
   }
+
   /**
    * 失敗したHttp操作を処理します。
    * アプリを持続させます。
@@ -98,5 +108,10 @@ export class HeroService {
       // 空の結果を返して、アプリを持続可能にする
       return of(result as T);
     };
+  }
+
+  /** HeroServiceのメッセージをMessageServiceを使って記録 */
+  private log(message: string) {
+    this.messageService.add(`HeroService: ${message}`);
   }
 }
